@@ -5,16 +5,16 @@ Bracket holds a tournament prize until two public pages name the same winner, an
 ## Deployment
 
 - **Network:** GenLayer StudioNet
-- **Chain ID:** 61999 (`0xf22f`)
-- **Contract:** `0xf4ee36758f123755558f80bdB607041b961E21Bc`
-- **Explorer:** [View contract](https://explorer-studio.genlayer.com/address/0xf4ee36758f123755558f80bdB607041b961E21Bc)
+- **Chain ID:** 61999 (0xf22f)
+- **Contract:** `0xd06b2f86f48CFa5EbF401aAa04ca775beC01bF8C`
+- **Explorer:** [View contract](https://explorer-studio.genlayer.com/address/0xd06b2f86f48CFa5EbF401aAa04ca775beC01bF8C)
 
-**Source:** [`src/Bracket.py`](src/Bracket.py)
+**Source:** [src/Bracket.py](src/Bracket.py)
 
 ## How it works
 
 1. An organizer posts a prize with a title, game, bracket date, roster URL, and bracket URL.
-2. Players register a handle before the bracket date.
+2. The organizer authorizes each handle to a specific player address. Only that address can register the handle, and registration closes the day before the bracket date.
 3. On or after the bracket date, anyone can settle the tournament.
 4. The prize is paid only if both pages name the same handle and that handle is registered.
 5. An unregistered winner does not move the prize. If the tournament is still open the next UTC day, anyone can return the prize to the organizer.
@@ -22,15 +22,15 @@ Bracket holds a tournament prize until two public pages name the same winner, an
 ## Methods
 
 - `create_tournament(title, game, bracket_date, roster_url, bracket_url)` payable. Returns the id.
-- `register(tournament_id, handle)` before the bracket date.
+- `authorize(tournament_id, handle, player)` — organizer only. Binds a handle to a specific address. Closed on or after the bracket date.
+- `register(tournament_id, handle)` — only the authorized player. Closed on or after the bracket date.
 - `settle(tournament_id)` on or after `bracket_date`.
 - `return_unclaimed(tournament_id)` on or after `claim_after`.
 - `get_tournament(tournament_id)`
+- `get_seat(tournament_id, handle)`
 - `get_entry(tournament_id, handle)`
 - `get_tournament_count()`
 - `get_reserved_prizes()`
-
-`claim_after` is stored as the bracket date plus one UTC day. It is not an argument.
 
 ## Rules
 
