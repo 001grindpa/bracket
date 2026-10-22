@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bracket — Tournament Prize Escrow</title>
+  <meta name="description"
+    content="Decentralized tournament prize escrow on GenLayer StudioNet. Locks tournament prize until two public pages name the same registered winner.">
+
+  <!-- Early theme and view application script before first paint -->
+  <script>
+    (function () {
+      try {
+        var savedTheme = localStorage.getItem('bracket.theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+        var savedView = localStorage.getItem('bracket.view');
+        var style = document.createElement('style');
+        style.id = 'initial-view-style';
+        if (savedView === 'desk' || savedView === 'floor') {
+          style.innerHTML = '#landing-view { display: none !important; } #desk-view { display: block !important; }';
+        } else {
+          style.innerHTML = '#desk-view { display: none !important; } #landing-view { display: block !important; }';
+        }
+        document.head.appendChild(style);
+      } catch (_) { }
+    })();
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Rajdhani:wght@600;700;800&display=swap"
+    rel="stylesheet">
+
+  <link rel="icon" type="image/png" href="static/bracket-mark.png">
+  <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+  <div id="bracket-root">
+
+    <!-- ============================================================ -->
+    <!-- LANDING VIEW (Public Overview - NO wallet button here!) -->
+    <!-- ============================================================ -->
+    <main id="landing-view" class="view-container">
+      <header class="landing-header">
+        <div class="landing-brand">
+          <img src="static/bracket-mark.png" alt="Bracket Emblem" class="brand-logo" width="40" height="40">
+          <div class="brand-text">
+            <span class="brand-name font-display">BRACKET</span>
+            <span class="brand-sub font-mono">TOURNAMENT DESK</span>
+          </div>
+        </div>
+
+        <div class="landing-top-actions">
+          <!-- Circular theme toggle button with no text -->
+          <button type="button" class="theme-toggle-btn" id="theme-toggle-landing" aria-label="Toggle light/dark theme"
+            title="Toggle theme">
+            <svg class="theme-icon sun-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <svg class="theme-icon moon-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="landing-hero-wrapper">
+        <div class="landing-hero">
+          <div class="hero-badge-row">
+            <span class="badge-network font-mono">GenLayer StudioNet · Chain 61999 (0xf22f)</span>
+            <span class="badge-verified font-mono">Smart Contract Escrow</span>
+          </div>
+
+          <h1 class="landing-headline font-display">
+            Lock tournament prize escrow until two public pages name the same registered winner.
+          </h1>
+
+          <p class="landing-summary">
+            Bracket holds prize funds on-chain for competitive gaming. Organizers post prizes with independent bracket
+            and roster sources. Players register authorized handles. GenLayer AI validators settle payouts directly to
+            the winner's wallet once both public sources corroborate the victory.
+          </p>
+
+          <div class="landing-action-row">
+            <button type="button" class="btn-primary-desk" id="enter-floor">
+              <span>Enter floor</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Contract Deployment Card -->
+          <div class="contract-docket">
+            <div class="docket-header">
+              <span class="docket-title font-mono">DEPLOYED TOURNAMENT CONTRACT</span>
+              <span class="docket-network font-mono">Chain ID: 61999</span>
+            </div>
+            <div class="docket-body">
+              <code class="docket-address font-mono"
+                id="landing-contract-address">0x3D6368539B1959A74229326853dfD783aC11A55D</code>
+              <a href="https://explorer-studio.genlayer.com/address/0x3D6368539B1959A74229326853dfD783aC11A55D"
+                target="_blank" rel="noopener noreferrer" class="docket-link" title="View on StudioNet Explorer">
+                <span>Explorer</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Specimen Bracket Showcase -->
+        <div class="specimen-section">
+          <div class="specimen-bracket-card">
+            <div class="bracket-card-header">
+              <span class="bracket-tag font-mono">SPECIMEN BRACKET MATCH</span>
+              <span class="bracket-state font-mono chip-open">OPEN ESCROW</span>
+            </div>
+            <div class="bracket-tree-diagram">
+              <div class="bracket-col">
+                <div class="match-box">
+                  <div class="player-slot is-winner font-mono">ace (Authorized)</div>
+                  <div class="player-slot font-mono">blitz</div>
+                </div>
+                <div class="match-box">
+                  <div class="player-slot is-winner font-mono">cipher (Authorized)</div>
+                  <div class="player-slot font-mono">draco</div>
+                </div>
+              </div>
+              <div class="bracket-connector">
+                <span class="connector-line"></span>
+              </div>
+              <div class="bracket-col">
+                <div class="match-box championship-box">
+                  <div class="championship-label font-mono">GRAND FINALS</div>
+                  <div class="player-slot is-champion font-mono">WINNER: ace (Registered)</div>
+                  <div class="player-slot font-mono">cipher</div>
+                </div>
+              </div>
+              <div class="bracket-connector">
+                <span class="connector-line"></span>
+              </div>
+              <div class="bracket-col payout-col">
+                <div class="payout-box">
+                  <span class="payout-label font-mono">DUAL CONSENSUS PAYOUT</span>
+                  <div class="payout-amount font-mono">1.00 GEN</div>
+                  <span class="payout-rule font-mono">Liquipedia + start.gg Unanimous</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Three Steps Grid -->
+        <div class="landing-grid">
+          <div class="grid-card">
+            <div class="card-step-num font-mono">01</div>
+            <h3 class="card-step-title font-display">Create &amp; Escrow</h3>
+            <p class="card-step-desc">
+              Organizers deposit the prize pot in GEN and declare the title, game, bracket date, and two independent
+              allowlisted URLs on distinct hosts.
+            </p>
+          </div>
+          <div class="grid-card">
+            <div class="card-step-num font-mono">02</div>
+            <h3 class="card-step-title font-display">Authorize &amp; Register</h3>
+            <p class="card-step-desc">
+              Organizers authorize competitive handles to player wallets. Players verify registrations on-chain.
+              <strong>Registration closes the day before bracket_date.</strong>
+            </p>
+          </div>
+          <div class="grid-card">
+            <div class="card-step-num font-mono">03</div>
+            <h3 class="card-step-title font-display">Dual-Source Settlement</h3>
+            <p class="card-step-desc">
+              On or after bracket date, settlement triggers GenLayer AI web consensus. Prize is paid only if both pages
+              name the same registered handle.
+            </p>
+          </div>
+        </div>
+
+        <!-- Allowlisted Sources Section -->
+        <div class="sources-box">
+          <div class="sources-header">
+            <span class="sources-title font-mono">ALLOWLISTED TOURNAMENT DOMAINS</span>
+            <span class="sources-sub font-mono">Must use two distinct hosts</span>
+          </div>
+          <div class="sources-pills">
+            <span class="source-pill font-mono">liquipedia.net</span>
+            <span class="source-pill font-mono">start.gg</span>
+            <span class="source-pill font-mono">challengermode.com</span>
+            <span class="source-pill font-mono">toornament.com</span>
+            <span class="source-pill font-mono">battlefy.com</span>
+            <span class="source-pill font-mono">github.com</span>
+            <span class="source-pill font-mono">gitlab.com</span>
+            <span class="source-pill font-mono">docs.google.com</span>
+            <span class="source-pill font-mono">wikipedia.org</span>
+          </div>
+        </div>
+
+      </div>
+    </main>
+    <!-- ============================================================ -->
+    <!-- DESK VIEW (Working Floor: Create, Authorize, Register, Settle, Return, Lookup) -->
+    <!-- ============================================================ -->
+    <div id="desk-view" class="view-container is-hidden">
+
+      <!-- Desk Top Bar -->
+      <header class="desk-top-bar" id="desk-top-bar">
+        <div class="top-bar-left">
+          <button type="button" class="btn-desk-nav-back" id="back-to-landing" aria-label="Return to overview">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"></path>
+            </svg>
+            <span>Overview</span>
+          </button>
+          <div class="desk-brand-badge">
+            <img src="static/bracket-mark.png" alt="Bracket Emblem" class="desk-logo" width="28" height="28">
+            <span class="desk-brand-title font-display">Bracket Desk</span>
+          </div>
+        </div>
+
+        <div class="top-bar-center">
+          <div class="stats-ticker font-mono" id="desk-stats-ticker" title="Live StudioNet figures">
+            <div class="stat-cell">
+              <span class="stat-label">Tournaments:</span>
+              <span class="stat-val" id="stat-tournament-count">—</span>
+            </div>
+            <div class="stat-sep">|</div>
+            <div class="stat-cell">
+              <span class="stat-label">Reserved:</span>
+              <span class="stat-val" id="stat-reserved-prizes">— GEN</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="top-bar-right">
+          <div class="network-badge font-mono" id="desk-network-badge">
+            <span class="network-dot"></span>
+            <span>StudioNet (61999)</span>
+          </div>
+
+          <!-- Wallet Controls (Only on Desk) -->
+          <div class="wallet-box" id="desk-wallet-box">
+            <button type="button" class="btn-wallet-connect" id="connect-wallet">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                <line x1="2" y1="10" x2="22" y2="10"></line>
+              </svg>
+              <span>Connect Wallet</span>
+            </button>
+
+            <div class="wallet-connected-group is-hidden" id="wallet-connected-group">
+              <div class="wallet-pill font-mono" id="wallet-address-short" title="Connected wallet address">
+                0x0000...0000
+              </div>
+              <button type="button" class="btn-wallet-disconnect" id="disconnect-wallet" title="Disconnect wallet"
+                aria-label="Disconnect wallet">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                  <line x1="12" y1="2" x2="12" y2="12"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Circular theme toggle button with no text -->
+          <button type="button" class="theme-toggle-btn" id="theme-toggle-desk" aria-label="Toggle light/dark theme"
+            title="Toggle theme">
+            <svg class="theme-icon sun-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <svg class="theme-icon moon-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Desk Sub-Navigation Tabs: Create, Authorize, Register, Settle, Return, Lookup -->
+      <nav class="desk-tabs-bar" aria-label="Tournament Desk Panels">
+        <button type="button" class="desk-tab-btn is-active" data-target="panel-create">
+          <span class="tab-index font-mono">01</span>
+          <span class="tab-title">Create</span>
+        </button>
+        <button type="button" class="desk-tab-btn" data-target="panel-authorize">
+          <span class="tab-index font-mono">02</span>
+          <span class="tab-title">Authorize</span>
+        </button>
+        <button type="button" class="desk-tab-btn" data-target="panel-register">
+          <span class="tab-index font-mono">03</span>
+          <span class="tab-title">Register</span>
+        </button>
+        <button type="button" class="desk-tab-btn" data-target="panel-settle">
+          <span class="tab-index font-mono">04</span>
+          <span class="tab-title">Settle</span>
+        </button>
+        <button type="button" class="desk-tab-btn" data-target="panel-return">
+          <span class="tab-index font-mono">05</span>
+          <span class="tab-title">Return</span>
+        </button>
+        <button type="button" class="desk-tab-btn" data-target="panel-lookup">
+          <span class="tab-index font-mono">06</span>
+          <span class="tab-title">Lookup</span>
+        </button>
+      </nav>
+
+      <!-- Desk Content Area -->
+      <main class="desk-workspace">
+
+        <!-- 7-Phase Status Stepper Card -->
+        <div class="write-flow-card is-hidden" id="write-flow-card">
+          <div class="flow-header">
+            <div class="flow-heading-group">
+              <span class="flow-spinner"></span>
+              <span class="flow-heading font-display">TRANSACTION PIPELINE</span>
+            </div>
+            <div class="flow-hash font-mono" id="flow-hash"></div>
+          </div>
+
+          <div class="flow-stepper">
+            <div class="flow-step" data-step="signature">
+              <span class="step-num font-mono">1</span>
+              <span class="step-text font-mono">Signature</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="flow-step" data-step="submitted">
+              <span class="step-num font-mono">2</span>
+              <span class="step-text font-mono">Submitted</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="flow-step" data-step="wait finalized">
+              <span class="step-num font-mono">3</span>
+              <span class="step-text font-mono">Wait Finalized</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="flow-step" data-step="consensus">
+              <span class="step-num font-mono">4</span>
+              <span class="step-text font-mono">Consensus</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="flow-step" data-step="execution">
+              <span class="step-num font-mono">5</span>
+              <span class="step-text font-mono">Execution</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="flow-step" data-step="read">
+              <span class="step-num font-mono">6</span>
+              <span class="step-text font-mono">Read</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="flow-step" data-step="accepted">
+              <span class="step-num font-mono">7</span>
+              <span class="step-text font-mono">Accepted</span>
+            </div>
+          </div>
+
+          <div class="flow-status-msg font-mono" id="flow-message">Awaiting signature from connected wallet...</div>
+        </div>
+
+        <!-- Accepted Tournament Dossier / Readout Card -->
+        <div class="dossier-card is-hidden" id="readout-dossier">
+          <div class="dossier-header">
+            <div class="dossier-title-wrap">
+              <span class="dossier-badge font-mono">TOURNAMENT DOSSIER</span>
+              <span class="dossier-id font-mono" id="dossier-id">#1</span>
+            </div>
+            <div class="dossier-status-wrap">
+              <span class="status-chip status-open font-mono" id="dossier-status">OPEN</span>
+            </div>
+          </div>
+
+          <div class="dossier-grid">
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Tournament Title</span>
+              <span class="dossier-value font-display" id="dossier-title">—</span>
+            </div>
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Game / Discipline</span>
+              <span class="dossier-value font-display" id="dossier-game">—</span>
+            </div>
+            <div class="dossier-cell highlight-cell">
+              <span class="dossier-label font-mono">Escrowed Prize</span>
+              <span class="dossier-value font-mono" id="dossier-prize">0.00 GEN</span>
+            </div>
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Winner Handle</span>
+              <span class="dossier-value font-mono" id="dossier-winner-handle">None</span>
+            </div>
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Funds Disposition</span>
+              <span class="dossier-value font-mono" id="dossier-funds-disp">—</span>
+            </div>
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Bracket Date</span>
+              <span class="dossier-value font-mono" id="dossier-bracket-date">—</span>
+            </div>
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Claim After Date</span>
+              <span class="dossier-value font-mono" id="dossier-claim-after">—</span>
+            </div>
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Settle Allowed?</span>
+              <span class="dossier-value font-mono" id="dossier-settle-allowed">—</span>
+            </div>
+            <div class="dossier-cell">
+              <span class="dossier-label font-mono">Return Allowed?</span>
+              <span class="dossier-value font-mono" id="dossier-return-allowed">—</span>
+            </div>
+          </div>
+
+          <div class="dossier-links">
+            <div class="link-item">
+              <span class="link-label font-mono">Roster Source:</span>
+              <a href="#" target="_blank" rel="noopener noreferrer" class="link-val font-mono"
+                id="dossier-roster-url">—</a>
+            </div>
+            <div class="link-item">
+              <span class="link-label font-mono">Bracket Source:</span>
+              <a href="#" target="_blank" rel="noopener noreferrer" class="link-val font-mono"
+                id="dossier-bracket-url">—</a>
+            </div>
+          </div>
+
+          <div class="seat-entry-results">
+            <div class="query-result-box is-hidden font-mono" id="lookup-seat-result"></div>
+            <div class="query-result-box is-hidden font-mono" id="lookup-entry-result"></div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- FORM PANELS: Create, Authorize, Register, Settle, Return, Lookup -->
+        <!-- ======================================================== -->
+
+        <!-- 01. CREATE PANEL -->
+        <section class="desk-panel is-visible" id="panel-create">
+          <div class="panel-header-box">
+            <h2 class="panel-heading font-display">Create Tournament Escrow</h2>
+            <p class="panel-sub">Deposit a prize into contract escrow and register the competitive bracket parameters.
+            </p>
+          </div>
+
+          <form class="desk-form" id="form-create-tournament">
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label for="create-title" class="form-label font-mono">Tournament Title</label>
+                <input type="text" id="create-title" class="form-input" placeholder="e.g. Apex Continental Masters"
+                  required>
+              </div>
+              <div class="form-group">
+                <label for="create-game" class="form-label font-mono">Game / Discipline</label>
+                <input type="text" id="create-game" class="form-input" placeholder="e.g. Rocket League" required>
+              </div>
+            </div>
+
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label for="create-bracket-date" class="form-label font-mono">Bracket Date (YYYY-MM-DD)</label>
+                <input type="text" id="create-bracket-date" class="form-input font-mono" placeholder="2026-12-31"
+                  pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" required>
+              </div>
+              <div class="form-group">
+                <label for="create-prize" class="form-label font-mono">Prize Value (GEN)</label>
+                <input type="text" id="create-prize" class="form-input font-mono" placeholder="1.0" required>
+              </div>
+            </div>
+
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label for="create-roster-url" class="form-label font-mono">Roster Page HTTPS URL</label>
+                <input type="url" id="create-roster-url" class="form-input font-mono"
+                  placeholder="https://liquipedia.net/rocketleague/Main_Page" required>
+              </div>
+              <div class="form-group">
+                <label for="create-bracket-url" class="form-label font-mono">Bracket Page HTTPS URL</label>
+                <input type="url" id="create-bracket-url" class="form-input font-mono"
+                  placeholder="https://start.gg/tournament/sample" required>
+              </div>
+            </div>
+
+            <div class="form-helper-card">
+              <div class="helper-icon">ℹ</div>
+              <div class="helper-content">
+                <strong>Rules &amp; Constraints:</strong> Prize must be greater than zero and is parsed using BigInt
+                arithmetic without loss of precision. Roster and Bracket URLs must be HTTPS from allowlisted domains on
+                two different hosts. <strong>Registration closes the day before bracket_date.</strong>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-submit" id="btn-submit-create">
+                <span>Create Tournament &amp; Lock Prize</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 02. AUTHORIZE PANEL -->
+        <section class="desk-panel" id="panel-authorize">
+          <div class="panel-header-box">
+            <h2 class="panel-heading font-display">Authorize Player Handle</h2>
+            <p class="panel-sub">Organizer only: bind an esports player handle to an authorized wallet address.</p>
+          </div>
+
+          <form class="desk-form" id="form-authorize">
+            <div class="form-row form-row-3">
+              <div class="form-group">
+                <label for="auth-tournament-id" class="form-label font-mono">Tournament ID</label>
+                <input type="text" id="auth-tournament-id" class="form-input font-mono" placeholder="1" required>
+              </div>
+              <div class="form-group">
+                <label for="auth-handle" class="form-label font-mono">Player Handle</label>
+                <input type="text" id="auth-handle" class="form-input font-mono" placeholder="ace" maxlength="24"
+                  required>
+              </div>
+              <div class="form-group">
+                <label for="auth-player-address" class="form-label font-mono">Player Wallet Address (0x...)</label>
+                <input type="text" id="auth-player-address" class="form-input font-mono"
+                  placeholder="0x70997970C51812dc3A010C7d01b50e0d17dc79C8" pattern="^0x[0-9a-fA-F]{40}$" required>
+              </div>
+            </div>
+
+            <div class="form-helper-card">
+              <div class="helper-icon">ℹ</div>
+              <div class="helper-content">
+                <strong>Organizer Only:</strong> Only the tournament creator can authorize handles. Handles must be 3 to
+                24 characters (letters, numbers, dot, underscore, dash). Player address cannot be zero or the organizer
+                address. <strong>Registration closes the day before bracket_date.</strong>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-submit" id="btn-submit-auth">
+                <span>Authorize Seat</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 03. REGISTER PANEL -->
+        <section class="desk-panel" id="panel-register">
+          <div class="panel-header-box">
+            <h2 class="panel-heading font-display">Register Player Entry</h2>
+            <p class="panel-sub">Authorized player only: claim your authorized competitive handle from your wallet.</p>
+          </div>
+
+          <form class="desk-form" id="form-register">
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label for="reg-tournament-id" class="form-label font-mono">Tournament ID</label>
+                <input type="text" id="reg-tournament-id" class="form-input font-mono" placeholder="1" required>
+              </div>
+              <div class="form-group">
+                <label for="reg-handle" class="form-label font-mono">Player Handle</label>
+                <input type="text" id="reg-handle" class="form-input font-mono" placeholder="ace" maxlength="24"
+                  required>
+              </div>
+            </div>
+
+            <div class="form-helper-card">
+              <div class="helper-icon">ℹ</div>
+              <div class="helper-content">
+                <strong>Authorized Player Only:</strong> You must connect the exact wallet address that the organizer
+                authorized for this handle. Prize will only be paid out to registered handles. <strong>Registration
+                  closes the day before bracket_date.</strong>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-submit" id="btn-submit-register">
+                <span>Register Entry</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 04. SETTLE PANEL -->
+        <section class="desk-panel" id="panel-settle">
+          <div class="panel-header-box">
+            <h2 class="panel-heading font-display">Settle Tournament</h2>
+            <p class="panel-sub">Trigger GenLayer AI web consensus to verify the winner across both public sources.</p>
+          </div>
+
+          <form class="desk-form" id="form-settle">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="settle-tournament-id" class="form-label font-mono">Tournament ID</label>
+                <input type="text" id="settle-tournament-id" class="form-input font-mono" placeholder="1" required>
+              </div>
+            </div>
+
+            <div class="form-helper-card">
+              <div class="helper-icon">ℹ</div>
+              <div class="helper-content">
+                <strong>Public Settlement:</strong> Anyone can call settle on or after the declared bracket_date.
+                GenLayer validators scrape and read both the roster URL and bracket URL. <strong>The prize is paid only
+                  if both pages name the same registered handle.</strong> If the winner is unregistered or sources
+                disagree, the tournament remains open for organizer reclamation after the claim date.
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-submit" id="btn-submit-settle">
+                <span>Trigger Consensus Settlement</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 05. RETURN PANEL -->
+        <section class="desk-panel" id="panel-return">
+          <div class="panel-header-box">
+            <h2 class="panel-heading font-display">Return Unclaimed Prize</h2>
+            <p class="panel-sub">Return unclaimed escrowed prize funds back to the organizer after the grace period.</p>
+          </div>
+
+          <form class="desk-form" id="form-return">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="return-tournament-id" class="form-label font-mono">Tournament ID</label>
+                <input type="text" id="return-tournament-id" class="form-input font-mono" placeholder="1" required>
+              </div>
+            </div>
+
+            <div class="form-helper-card">
+              <div class="helper-icon">ℹ</div>
+              <div class="helper-content">
+                <strong>Reclamation Rule:</strong> If a tournament remains OPEN past the claim_after date (the UTC day
+                after bracket_date), anyone can trigger return_unclaimed to release the escrowed GEN prize back to the
+                organizer's wallet.
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-submit" id="btn-submit-return">
+                <span>Return Unclaimed Funds</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 06. LOOKUP PANEL -->
+        <section class="desk-panel" id="panel-lookup">
+          <div class="panel-header-box">
+            <h2 class="panel-heading font-display">Lookup Tournament &amp; Handles</h2>
+            <p class="panel-sub">Inspect real-time contract state, payout status, funds disposition, and handle
+              seats/entries.</p>
+          </div>
+
+          <form class="desk-form" id="form-lookup">
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label for="lookup-tournament-id" class="form-label font-mono">Tournament ID (Required)</label>
+                <input type="text" id="lookup-tournament-id" class="form-input font-mono" placeholder="1" required>
+              </div>
+              <div class="form-group">
+                <label for="lookup-handle" class="form-label font-mono">Handle (Optional to check Seat/Entry)</label>
+                <input type="text" id="lookup-handle" class="form-input font-mono" placeholder="e.g. ace">
+              </div>
+            </div>
+
+            <div class="form-helper-card">
+              <div class="helper-icon">ℹ</div>
+              <div class="helper-content">
+                <strong>Read Operations:</strong> Reads are completely gasless and use neutral non-mutating callers.
+                Inspect tournament details, dates, sources, winner handles, and whether settle or return actions are
+                allowed right now.
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-submit" id="btn-submit-lookup">
+                <span>Inspect Tournament</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+      </main>
+    </div>
+
+  </div>
+
+  <script type="module" src="static/app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "gameplay-bracket",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Bracket tournament prize contract static app",
+  "scripts": {
+    "test": "node --test test/frontend/app.test.js"
+  }
+}

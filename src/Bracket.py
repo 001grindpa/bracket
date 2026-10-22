@@ -1,193 +1,420 @@
-CONTRACT = "src/Bracket.py"
-ROSTER = "https://liquipedia.net/rocketleague/Main_Page"
-BRACKET = "https://www.start.gg/"
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+
+import json
+import re
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
+
+from genlayer import *
 
 
-def _set_today(day: str) -> None:
-    import src.Bracket as mod
+HTTPS = "https://"
+MAX_PAGE_CHARS = 12000
+MIN_TEXT_CHARS = 3
+CLAIM_GRACE_DAYS = 1
+ZERO = Address("0x0000000000000000000000000000000000000000")
+HANDLE_RE = re.compile(r"^[A-Za-z0-9_.-]{3,24}$")
 
-    mod._today_utc = lambda: day
+ALLOWED_HOSTS = (
+    "liquipedia.net",
+    "challengermode.com",
+    "toornament.com",
+    "start.gg",
+    "battlefy.com",
+    "github.com",
+    "gitlab.com",
+    "docs.google.com",
+    "wikipedia.org",
+    "en.wikipedia.org",
+)
 
 
-def _create(contract, vm, organizer, bracket_date="2026-12-31"):
-    vm.sender = organizer
-    return contract.create_tournament(
-        "City Cup",
-        "Rocket League",
-        bracket_date,
-        ROSTER,
-        BRACKET,
-        value=10**18,
-    )
+def _canonical_host(url: str) -> str:
+    host = (urlparse(url).hostname or "").lower()
+    if host.startswith("www."):
+        return host[4:]
+    return host
 
 
-def test_sources_must_differ(direct_vm, direct_deploy, direct_alice):
-    contract = direct_deploy(CONTRACT)
-    direct_vm.sender = direct_alice
-    with direct_vm.expect_revert("roster and bracket must come from two different hosts"):
-        contract.create_tournament(
-            "City Cup",
-            "Rocket League",
-            "2026-12-31",
-            ROSTER,
-            "https://liquipedia.net/rocketleague/Roster",
-            value=10**18,
+def _host_allowed(url: str) -> bool:
+    host = _canonical_host(url)
+    if not host:
+        return False
+    for allowed in ALLOWED_HOSTS:
+        if host == allowed or host.endswith("." + allowed):
+            return True
+    return False
+
+
+def _require_https_url(url: str, label: str) -> str:
+    cleaned = url.strip()
+    if not cleaned.lower().startswith(HTTPS):
+        raise gl.vm.UserError(f"{label} must be an https url")
+    if not _host_allowed(cleaned):
+        raise gl.vm.UserError(f"{label} host is not on the source allowlist")
+    return cleaned
+
+
+def _require_date(value: str, label: str) -> str:
+    cleaned = value.strip()
+    try:
+        datetime.strptime(cleaned, "%Y-%m-%d")
+    except ValueError:
+        raise gl.vm.UserError(label + " must be a real calendar date YYYY-MM-DD")
+    return cleaned
+
+
+def _add_days(day: str, days: int) -> str:
+    return (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+def _today_utc() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _norm_handle(value: str) -> str:
+    return re.sub(r"\s+", "", value or "").lower()
+
+
+@gl.evm.contract_interface
+class _Wallet:
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
+def _pay(to: Address, amount: u256) -> None:
+    if amount == 0:
+        return
+    if to == ZERO:
+        raise gl.vm.UserError("cannot pay the zero address")
+    _Wallet(to).emit_transfer(value=amount)
+
+
+@allow_storage
+@dataclass
+class Tournament:
+    organizer: Address
+    title: str
+    game: str
+    bracket_date: str
+    claim_after: str
+    roster_url: str
+    bracket_url: str
+    prize: u256
+    status: str
+    winner_handle: str
+    winner: Address
+    funds_disposition: str
+
+
+@allow_storage
+@dataclass
+class Seat:
+    player: Address
+    handle: str
+
+
+@allow_storage
+@dataclass
+class Entry:
+    player: Address
+    handle: str
+
+
+class Bracket(gl.Contract):
+    tournaments: TreeMap[str, Tournament]
+    seats: TreeMap[str, Seat]
+    entries: TreeMap[str, Entry]
+    next_id: u256
+    reserved_prizes: u256
+
+    def __init__(self):
+        self.next_id = u256(1)
+        self.reserved_prizes = u256(0)
+
+    def _id(self) -> str:
+        return str(int(self.next_id))
+
+    def _entry_key(self, tournament_id: str, handle: str) -> str:
+        return tournament_id + ":" + handle
+
+    def _get(self, tournament_id: str) -> Tournament:
+        if tournament_id not in self.tournaments:
+            raise gl.vm.UserError("tournament not found")
+        return self.tournaments[tournament_id]
+
+    def _extract_winner(self, url: str, title: str, game: str, bracket_date: str) -> dict:
+        failed = {"related": False, "date_match": False, "handle": ""}
+        try:
+            raw = gl.nondet.web.render(url, mode="text")
+            page_text = raw if isinstance(raw, str) else str(raw)
+            page_text = page_text[:MAX_PAGE_CHARS]
+        except Exception:
+            return failed
+        prompt = f"""
+Read one public tournament page and extract the winner handle.
+
+Tournament: {title}
+Game: {game}
+Bracket date (YYYY-MM-DD): {bracket_date}
+Source URL: {url}
+
+Page text:
+{page_text}
+
+Return JSON only:
+{{
+  "related": true or false,
+  "date_match": true or false,
+  "handle": "winner handle or empty"
+}}
+Rules:
+- related is true only if the page is this tournament.
+- date_match is true only if the page is about that calendar day or a final on that day.
+- handle is the winner's public handle, with no spaces. Empty if the winner is not shown.
+"""
+        try:
+            parsed = gl.nondet.exec_prompt(prompt, response_format="json")
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
+        except Exception:
+            return failed
+        handle = _norm_handle(str(parsed.get("handle", "")))
+        if not HANDLE_RE.match(handle):
+            handle = ""
+        return {
+            "related": bool(parsed.get("related", False)),
+            "date_match": bool(parsed.get("date_match", False)),
+            "handle": handle,
+        }
+
+    def _decision(self, item: Tournament) -> dict:
+        try:
+            roster = self._extract_winner(item.roster_url, item.title, item.game, item.bracket_date)
+            bracket = self._extract_winner(item.bracket_url, item.title, item.game, item.bracket_date)
+        except Exception:
+            return {"verdict": "UNKNOWN", "handle": ""}
+        if (
+            not roster["related"]
+            or not bracket["related"]
+            or not roster["date_match"]
+            or not bracket["date_match"]
+            or roster["handle"] == ""
+            or bracket["handle"] == ""
+        ):
+            return {"verdict": "UNKNOWN", "handle": ""}
+        if roster["handle"] != bracket["handle"]:
+            return {"verdict": "DISAGREE", "handle": ""}
+        return {"verdict": "WINNER", "handle": roster["handle"]}
+
+    def _adjudicate(self, item: Tournament) -> dict:
+        def leader_fn() -> str:
+            return json.dumps(self._decision(item), sort_keys=True, separators=(",", ":"))
+
+        def validator_fn(leader_result) -> bool:
+            payload = leader_result
+            if hasattr(leader_result, "calldata"):
+                payload = leader_result.calldata
+            if isinstance(payload, (bytes, bytearray)):
+                payload = payload.decode("utf-8", errors="replace")
+            if not isinstance(payload, str):
+                payload = str(payload)
+            try:
+                leader = json.loads(payload)
+            except Exception:
+                return False
+            own = self._decision(item)
+            return (
+                own.get("verdict") == str(leader.get("verdict", "")).upper()
+                and own.get("handle") == _norm_handle(str(leader.get("handle", "")))
+            )
+
+        try:
+            raw = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+        except Exception:
+            return {"verdict": "UNKNOWN", "handle": ""}
+        try:
+            if isinstance(raw, str):
+                return json.loads(raw)
+            if hasattr(raw, "calldata"):
+                data = raw.calldata
+                return json.loads(data if isinstance(data, str) else str(data))
+            return json.loads(str(raw))
+        except Exception:
+            return {"verdict": "UNKNOWN", "handle": ""}
+
+    @gl.public.write.payable
+    def create_tournament(
+        self,
+        title: str,
+        game: str,
+        bracket_date: str,
+        roster_url: str,
+        bracket_url: str,
+    ) -> str:
+        if len(title.strip()) < MIN_TEXT_CHARS or len(game.strip()) < MIN_TEXT_CHARS:
+            raise gl.vm.UserError("title and game are required")
+        bracket_date = _require_date(bracket_date, "bracket_date")
+        roster = _require_https_url(roster_url, "roster_url")
+        bracket = _require_https_url(bracket_url, "bracket_url")
+        if _canonical_host(roster) == _canonical_host(bracket):
+            raise gl.vm.UserError("roster and bracket must come from two different hosts")
+        prize = gl.message.value
+        if prize == u256(0):
+            raise gl.vm.UserError("prize must be greater than zero")
+        tournament_id = self._id()
+        self.tournaments[tournament_id] = Tournament(
+            organizer=gl.message.sender_address,
+            title=title.strip(),
+            game=game.strip(),
+            bracket_date=bracket_date,
+            claim_after=_add_days(bracket_date, CLAIM_GRACE_DAYS),
+            roster_url=roster,
+            bracket_url=bracket,
+            prize=prize,
+            status="OPEN",
+            winner_handle="",
+            winner=ZERO,
+            funds_disposition="RESERVED",
+        )
+        self.next_id = self.next_id + u256(1)
+        self.reserved_prizes = self.reserved_prizes + prize
+        return tournament_id
+
+    @gl.public.write
+    def authorize(self, tournament_id: str, handle: str, player: str) -> None:
+        item = self._get(tournament_id)
+        if gl.message.sender_address != item.organizer:
+            raise gl.vm.UserError("only the organizer can authorize a handle")
+        if item.status != "OPEN":
+            raise gl.vm.UserError("registration is closed")
+        if _today_utc() >= item.bracket_date:
+            raise gl.vm.UserError("registration is closed before the bracket date")
+        cleaned = _norm_handle(handle)
+        if HANDLE_RE.match(cleaned) is None:
+            raise gl.vm.UserError("handle must be 3 to 24 letters, numbers, dot, underscore, or dash")
+        player_addr = Address(player)
+        if player_addr == ZERO:
+            raise gl.vm.UserError("player is required")
+        key = self._entry_key(tournament_id, cleaned)
+        if key in self.entries:
+            raise gl.vm.UserError("handle already registered")
+        self.seats[key] = Seat(player=player_addr, handle=cleaned)
+
+    @gl.public.write
+    def register(self, tournament_id: str, handle: str) -> None:
+        item = self._get(tournament_id)
+        if item.status != "OPEN":
+            raise gl.vm.UserError("registration is closed")
+        if _today_utc() >= item.bracket_date:
+            raise gl.vm.UserError("registration is closed before the bracket date")
+        cleaned = _norm_handle(handle)
+        key = self._entry_key(tournament_id, cleaned)
+        if key not in self.seats:
+            raise gl.vm.UserError("handle is not authorized")
+        seat = self.seats[key]
+        if gl.message.sender_address != seat.player:
+            raise gl.vm.UserError("only the authorized player can register this handle")
+        if key in self.entries:
+            raise gl.vm.UserError("handle already registered")
+        self.entries[key] = Entry(player=seat.player, handle=cleaned)
+
+    @gl.public.write
+    def settle(self, tournament_id: str) -> str:
+        item = self._get(tournament_id)
+        if item.status != "OPEN":
+            raise gl.vm.UserError("tournament is not open")
+        if _today_utc() < item.bracket_date:
+            raise gl.vm.UserError("bracket cannot be settled before " + item.bracket_date)
+        result = self._adjudicate(item)
+        verdict = str(result.get("verdict", "UNKNOWN")).upper()
+        handle = _norm_handle(str(result.get("handle", "")))
+        if verdict != "WINNER" or handle == "":
+            item.winner_handle = verdict if verdict in ("UNKNOWN", "DISAGREE") else "UNKNOWN"
+            self.tournaments[tournament_id] = item
+            return item.status
+        key = self._entry_key(tournament_id, handle)
+        if key not in self.entries:
+            item.winner_handle = handle
+            item.funds_disposition = "UNREGISTERED_WINNER"
+            self.tournaments[tournament_id] = item
+            return item.status
+        entry = self.entries[key]
+        item.status = "PAID"
+        item.winner_handle = handle
+        item.winner = entry.player
+        item.funds_disposition = "PAID_TO_REGISTERED_WINNER"
+        self.reserved_prizes = self.reserved_prizes - item.prize
+        self.tournaments[tournament_id] = item
+        _pay(entry.player, item.prize)
+        return item.status
+
+    @gl.public.write
+    def return_unclaimed(self, tournament_id: str) -> None:
+        item = self._get(tournament_id)
+        if item.status != "OPEN":
+            raise gl.vm.UserError("prize is not returnable")
+        if _today_utc() < item.claim_after:
+            raise gl.vm.UserError("unclaimed prize cannot return before " + item.claim_after)
+        prize = item.prize
+        organizer = item.organizer
+        item.status = "RETURNED"
+        item.funds_disposition = "RETURNED_TO_ORGANIZER"
+        self.reserved_prizes = self.reserved_prizes - prize
+        self.tournaments[tournament_id] = item
+        _pay(organizer, prize)
+
+    @gl.public.view
+    def get_tournament(self, tournament_id: str) -> str:
+        item = self._get(tournament_id)
+        return json.dumps(
+            {
+                "organizer": item.organizer.as_hex,
+                "title": item.title,
+                "game": item.game,
+                "bracket_date": item.bracket_date,
+                "claim_after": item.claim_after,
+                "roster_url": item.roster_url,
+                "bracket_url": item.bracket_url,
+                "prize": str(int(item.prize)),
+                "status": item.status,
+                "winner_handle": item.winner_handle,
+                "winner": item.winner.as_hex,
+                "funds_disposition": item.funds_disposition,
+            },
+            sort_keys=True,
         )
 
-
-def test_rejects_impossible_date(direct_vm, direct_deploy, direct_alice):
-    contract = direct_deploy(CONTRACT)
-    direct_vm.sender = direct_alice
-    with direct_vm.expect_revert("bracket_date must be a real calendar date"):
-        contract.create_tournament(
-            "City Cup",
-            "Rocket League",
-            "2026-02-31",
-            ROSTER,
-            BRACKET,
-            value=10**18,
+    @gl.public.view
+    def get_seat(self, tournament_id: str, handle: str) -> str:
+        key = self._entry_key(tournament_id, _norm_handle(handle))
+        if key not in self.seats:
+            raise gl.vm.UserError("seat not found")
+        seat = self.seats[key]
+        return json.dumps(
+            {"player": seat.player.as_hex, "handle": seat.handle},
+            sort_keys=True,
         )
 
+    @gl.public.view
+    def get_entry(self, tournament_id: str, handle: str) -> str:
+        key = self._entry_key(tournament_id, _norm_handle(handle))
+        if key not in self.entries:
+            raise gl.vm.UserError("entry not found")
+        entry = self.entries[key]
+        return json.dumps(
+            {"player": entry.player.as_hex, "handle": entry.handle},
+            sort_keys=True,
+        )
 
-def test_unrelated_address_cannot_register_handle(
-    direct_vm, direct_deploy, direct_alice, direct_bob
-):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice)
-    direct_vm.sender = direct_alice
-    contract.authorize(tournament_id, "ace", str(direct_bob))
-    with direct_vm.expect_revert("only the authorized player can register this handle"):
-        contract.register(tournament_id, "ace")
-    direct_vm.sender = direct_bob
-    contract.register(tournament_id, "ace")
-    raw = contract.get_entry(tournament_id, "ace")
-    assert "ace" in raw
-    assert direct_bob.as_hex.lower() in raw.lower() or str(direct_bob).lower() in raw.lower()
+    @gl.public.view
+    def get_tournament_count(self) -> str:
+        return str(int(self.next_id) - 1)
 
-
-def test_registration_closed_on_bracket_date(
-    direct_vm, direct_deploy, direct_alice, direct_bob
-):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice, bracket_date="2020-01-01")
-    direct_vm.sender = direct_alice
-    with direct_vm.expect_revert("registration is closed before the bracket date"):
-        contract.authorize(tournament_id, "ace", str(direct_bob))
-    direct_vm.sender = direct_bob
-    with direct_vm.expect_revert("registration is closed before the bracket date"):
-        contract.register(tournament_id, "ace")
-
-
-def test_register_and_reject_duplicate(direct_vm, direct_deploy, direct_alice, direct_bob):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice)
-    direct_vm.sender = direct_alice
-    contract.authorize(tournament_id, "Ace_One", str(direct_bob))
-    direct_vm.sender = direct_bob
-    contract.register(tournament_id, "Ace_One")
-    raw = contract.get_entry(tournament_id, "ace_one")
-    assert "ace_one" in raw
-    with direct_vm.expect_revert("handle already registered"):
-        contract.register(tournament_id, "ACE_ONE")
-
-
-def test_early_settle_and_return_blocked(direct_vm, direct_deploy, direct_alice):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice)
-    raw = contract.get_tournament(tournament_id)
-    assert "OPEN" in raw
-    assert "2027-01-01" in raw
-    with direct_vm.expect_revert("bracket cannot be settled before"):
-        contract.settle(tournament_id)
-    with direct_vm.expect_revert("unclaimed prize cannot return before"):
-        contract.return_unclaimed(tournament_id)
-    assert "OPEN" in contract.get_tournament(tournament_id)
-
-
-def test_return_not_open_on_bracket_day(direct_vm, direct_deploy, direct_alice):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice, bracket_date="2026-10-11")
-    raw = contract.get_tournament(tournament_id)
-    assert "2026-10-11" in raw
-    assert "2026-10-12" in raw
-    with direct_vm.expect_revert("unclaimed prize cannot return before"):
-        contract.return_unclaimed(tournament_id)
-    assert "OPEN" in contract.get_tournament(tournament_id)
-
-
-def test_return_unclaimed_once(direct_vm, direct_deploy, direct_alice):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice, bracket_date="2020-01-01")
-    assert "2020-01-02" in contract.get_tournament(tournament_id)
-    contract.return_unclaimed(tournament_id)
-    after = contract.get_tournament(tournament_id)
-    assert "RETURNED" in after
-    assert "RETURNED_TO_ORGANIZER" in after
-    assert contract.get_reserved_prizes() == "0"
-    with direct_vm.expect_revert("prize is not returnable"):
-        contract.return_unclaimed(tournament_id)
-
-
-def test_unregistered_winner_does_not_pay(direct_vm, direct_deploy, direct_alice):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice, bracket_date="2020-01-01")
-
-    def winner(_item):
-        return {"verdict": "WINNER", "handle": "ghost"}
-
-    contract._adjudicate = winner
-    status = contract.settle(tournament_id)
-    after = contract.get_tournament(tournament_id)
-    assert "OPEN" in after
-    assert "ghost" in after
-    assert "UNREGISTERED_WINNER" in after
-    assert "PAID" not in str(status)
-    assert contract.get_reserved_prizes() == str(10**18)
-
-
-def test_registered_winner_is_paid(direct_vm, direct_deploy, direct_alice, direct_bob):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice, bracket_date="2026-12-31")
-    direct_vm.sender = direct_alice
-    contract.authorize(tournament_id, "ace", str(direct_bob))
-    direct_vm.sender = direct_bob
-    contract.register(tournament_id, "ace")
-
-    def winner(_item):
-        return {"verdict": "WINNER", "handle": "ace"}
-
-    contract._adjudicate = winner
-    _set_today("2026-12-31")
-    contract.settle(tournament_id)
-    after = contract.get_tournament(tournament_id)
-    assert "PAID" in after
-    assert "PAID_TO_REGISTERED_WINNER" in after
-    assert "ace" in after
-    assert contract.get_reserved_prizes() == "0"
-    with direct_vm.expect_revert("tournament is not open"):
-        contract.settle(tournament_id)
-
-
-def test_late_registration_cannot_take_payout(
-    direct_vm, direct_deploy, direct_alice, direct_bob
-):
-    contract = direct_deploy(CONTRACT)
-    tournament_id = _create(contract, direct_vm, direct_alice, bracket_date="2026-12-31")
-    direct_vm.sender = direct_alice
-    contract.authorize(tournament_id, "ace", str(direct_bob))
-
-    def winner(_item):
-        return {"verdict": "WINNER", "handle": "ace"}
-
-    contract._adjudicate = winner
-    _set_today("2026-12-31")
-    status = contract.settle(tournament_id)
-    after = contract.get_tournament(tournament_id)
-    assert "OPEN" in after
-    assert "UNREGISTERED_WINNER" in after
-    assert "PAID" not in str(status)
-
-    direct_vm.sender = direct_bob
-    with direct_vm.expect_revert("registration is closed before the bracket date"):
-        contract.register(tournament_id, "ace")
-    assert contract.get_reserved_prizes() == str(10**18)
+    @gl.public.view
+    def get_reserved_prizes(self) -> str:
+        return str(int(self.reserved_prizes))
