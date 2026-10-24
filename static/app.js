@@ -480,6 +480,32 @@ async function loadSdk() {
   return await sdkPromise;
 }
 
+function wrapClient(rawClient) {
+  if (!rawClient || typeof rawClient.writeContract !== "function") return rawClient;
+  const origWrite = rawClient.writeContract.bind(rawClient);
+  rawClient.writeContract = async (payload) => {
+    if (typeof rawClient.initializeConsensusSmartContract === "function") {
+      try {
+        await rawClient.initializeConsensusSmartContract();
+      } catch (_) {}
+    }
+    const adjusted = { ...payload };
+    if (adjusted.account && typeof adjusted.account === "string") {
+      adjusted.account = {
+        address: adjusted.account,
+        type: "json-rpc",
+      };
+    } else if (!adjusted.account && state.walletAddress) {
+      adjusted.account = {
+        address: state.walletAddress,
+        type: "json-rpc",
+      };
+    }
+    return await origWrite(adjusted);
+  };
+  return rawClient;
+}
+
 export async function updateClient() {
   if (typeof window !== "undefined" && typeof window.createClient === "function") {
     const createClientFn = window.createClient;
@@ -495,15 +521,14 @@ export async function updateClient() {
     });
 
     if (state.walletAddress && /^0x[0-9a-fA-F]{40}$/.test(state.walletAddress) && state.provider) {
-      state.client = createClientFn({
+      state.client = wrapClient(createClientFn({
         chain: chainObj,
-        account: state.walletAddress,
         provider: state.provider,
-      });
+      }));
     } else {
-      state.client = createClientFn({
+      state.client = wrapClient(createClientFn({
         chain: chainObj,
-      });
+      }));
     }
     return state.client;
   }
@@ -516,15 +541,14 @@ export async function updateClient() {
         account: null,
       });
       if (state.walletAddress && /^0x[0-9a-fA-F]{40}$/.test(state.walletAddress) && state.provider) {
-        state.client = createClient({
+        state.client = wrapClient(createClient({
           chain: studionet,
-          account: state.walletAddress,
           provider: state.provider,
-        });
+        }));
       } else {
-        state.client = createClient({
+        state.client = wrapClient(createClient({
           chain: studionet,
-        });
+        }));
       }
       return state.client;
     } catch (_) {}
@@ -578,13 +602,19 @@ export async function executeWriteFlow(
       throw new Error("Contract call client is not ready.");
     }
 
+    const isRealGenLayer =
+      typeof state.client.initializeConsensusSmartContract === "function" ||
+      state.client.chain?.consensusMainContract !== undefined;
+
     const txPayload = {
       address: CONTRACT_ADDRESS,
       abi: ABI,
       functionName,
       args,
       value: value != null ? BigInt(value) : 0n,
-      account: state.walletAddress,
+      account: isRealGenLayer
+        ? { address: state.walletAddress, type: "json-rpc" }
+        : state.walletAddress,
     };
 
     const hash = await state.client.writeContract(txPayload);
@@ -1060,6 +1090,17 @@ export function setDeskPanel(panelId) {
       p.classList.remove("is-visible");
     }
   });
+
+  // Switching panels must clear or hide the previous panel's output.
+  // Do not leave lookup visible behind the next form.
+  const dossier = document.getElementById("readout-dossier");
+  if (dossier) {
+    dossier.classList.add("is-hidden");
+  }
+  const seatBox = document.getElementById("lookup-seat-result");
+  if (seatBox) seatBox.classList.add("is-hidden");
+  const entryBox = document.getElementById("lookup-entry-result");
+  if (entryBox) entryBox.classList.add("is-hidden");
 }
 
 export function renderStatusFlow(phase, details = "") {
@@ -1068,11 +1109,14 @@ export function renderStatusFlow(phase, details = "") {
   const flowCard = document.getElementById("write-flow-card");
   const flowMessage = document.getElementById("flow-message");
   const flowHash = document.getElementById("flow-hash");
+  const spinner = flowCard ? flowCard.querySelector(".flow-spinner") : null;
 
   if (!flowCard) return;
 
   if (!phase) {
     flowCard.classList.add("is-hidden");
+    flowCard.classList.remove("is-complete");
+    if (spinner) spinner.classList.remove("is-hidden");
     return;
   }
 
@@ -1087,19 +1131,39 @@ export function renderStatusFlow(phase, details = "") {
     const stepIdx = phases.indexOf(stepName);
     el.classList.remove("is-current", "is-complete");
 
-    if (stepIdx < currentIndex) {
+    if (phase === "accepted") {
       el.classList.add("is-complete");
-    } else if (stepIdx === currentIndex) {
-      el.classList.add("is-current");
+    } else {
+      if (stepIdx < currentIndex) {
+        el.classList.add("is-complete");
+      } else if (stepIdx === currentIndex) {
+        el.classList.add("is-current");
+      }
     }
   });
 
-  if (flowMessage) {
-    flowMessage.textContent = details || phase;
+  if (phase === "accepted") {
+    flowCard.classList.add("is-complete");
+    if (spinner) spinner.classList.add("is-hidden");
+  } else {
+    flowCard.classList.remove("is-complete");
+    if (spinner) spinner.classList.remove("is-hidden");
   }
 
-  if (flowHash && phase === "submitted" && details) {
-    flowHash.innerHTML = `<a href="${EXPLORER_BASE}/tx/${details}" target="_blank" rel="noopener noreferrer">${details.slice(0, 10)}...${details.slice(-8)}</a>`;
+  if (flowMessage) {
+    if (phase === "accepted") {
+      flowMessage.textContent = "Transaction accepted and finalized on StudioNet.";
+    } else {
+      flowMessage.textContent = details || phase;
+    }
+  }
+
+  const txHash = (details && typeof details === "string" && details.startsWith("0x"))
+    ? details
+    : state.latestTxHash;
+
+  if (flowHash && txHash) {
+    flowHash.innerHTML = `<a href="${EXPLORER_BASE}/tx/${txHash}" target="_blank" rel="noopener noreferrer">${txHash}</a>`;
   }
 }
 

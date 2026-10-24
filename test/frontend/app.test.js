@@ -39,7 +39,7 @@ if (!state) {
   throw new Error("static/app.js must export state");
 }
 
-describe("Bracket Tournament Prize App", () => {
+describe("Game Play Tournament Prize App", () => {
   beforeEach(() => {
     state.provider = null;
     state.walletAddress = "";
@@ -261,3 +261,4 @@ describe("Bracket Tournament Prize App", () => {
     }
   });
 });
+

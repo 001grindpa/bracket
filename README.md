@@ -1,6 +1,6 @@
-# Bracket
+# Game Play
 
-Bracket is a decentralized tournament prize escrow contract deployed on GenLayer StudioNet. The contract locks tournament prize funds until two independent public sources unanimously name the same winner, and that player handle is registered.
+Game Play is a decentralized tournament prize escrow application deployed on GenLayer StudioNet. The contract locks tournament prize funds until two independent public sources unanimously name the same winner, and that player handle is registered.
 
 ## Deployment
 
@@ -11,6 +11,23 @@ Bracket is a decentralized tournament prize escrow contract deployed on GenLayer
 - **Source Code:** [src/Bracket.py](src/Bracket.py)
 
 The submitted source code in `src/Bracket.py` matches the deployed contract on StudioNet.
+
+## Live StudioNet Transactions
+
+The following finalized transactions demonstrate live contract lifecycle execution on GenLayer StudioNet for contract `0x3D6368539B1959A74229326853dfD783aC11A55D`. Tournament 1 shows authorize then register, and tournament 2 shows return to organizer.
+
+### Tournament 1 (id 1)
+
+Tournament 1 demonstrates creating the tournament escrow, authorizing handle ace, and player registration:
+- **Create:** [0x79deaa499f29470501e9757877fdda94cd0b53ddf095f2f432c71026f75866f2](https://explorer-studio.genlayer.com/tx/0x79deaa499f29470501e9757877fdda94cd0b53ddf095f2f432c71026f75866f2)
+- **Authorize handle ace:** [0xd0d86a8bca34594eb6e60c6c379c482a4a24e0baf8a2351dc880a41bc6b4d2eb](https://explorer-studio.genlayer.com/tx/0xd0d86a8bca34594eb6e60c6c379c482a4a24e0baf8a2351dc880a41bc6b4d2eb)
+- **Register by authorized player:** [0xb598e974cca49243e47c1117f83ae01cfc6d299906a0d49f097b79525ddd852f](https://explorer-studio.genlayer.com/tx/0xb598e974cca49243e47c1117f83ae01cfc6d299906a0d49f097b79525ddd852f)
+
+### Tournament 2 (id 2)
+
+Tournament 2 demonstrates creating the tournament escrow and returning unclaimed prize funds to the organizer:
+- **Create:** [0x40c53876dd0a565e65defe61dac6fb2da208d9ddcf9a94c2676c2b364cf55a3e](https://explorer-studio.genlayer.com/tx/0x40c53876dd0a565e65defe61dac6fb2da208d9ddcf9a94c2676c2b364cf55a3e)
+- **Return unclaimed:** [0x35a7460c1b5f6bf9bfbc342623c6eb40499a2f7251be41b267299aa5f09181d2](https://explorer-studio.genlayer.com/tx/0x35a7460c1b5f6bf9bfbc342623c6eb40499a2f7251be41b267299aa5f09181d2)
 
 ## How It Works
 

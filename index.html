@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bracket — Tournament Prize Escrow</title>
+  <title>Game Play — Tournament Prize Escrow</title>
   <meta name="description"
     content="Decentralized tournament prize escrow on GenLayer StudioNet. Locks tournament prize until two public pages name the same registered winner.">
 
@@ -12,11 +12,11 @@
   <script>
     (function () {
       try {
-        var savedTheme = localStorage.getItem('bracket.theme');
+        var savedTheme = localStorage.getItem('gameplay.theme') || localStorage.getItem('bracket.theme');
         if (savedTheme === 'light' || savedTheme === 'dark') {
           document.documentElement.setAttribute('data-theme', savedTheme);
         }
-        var savedView = localStorage.getItem('bracket.view');
+        var savedView = localStorage.getItem('gameplay.view') || localStorage.getItem('bracket.view');
         var style = document.createElement('style');
         style.id = 'initial-view-style';
         if (savedView === 'desk' || savedView === 'floor') {
@@ -41,7 +41,7 @@
 </head>
 
 <body>
-  <div id="bracket-root">
+  <div id="gameplay-root">
 
     <!-- ============================================================ -->
     <!-- LANDING VIEW (Public Overview - NO wallet button here!) -->
@@ -51,7 +51,7 @@
         <div class="landing-brand">
           <img src="static/bracket-mark.png" alt="Bracket Emblem" class="brand-logo" width="40" height="40">
           <div class="brand-text">
-            <span class="brand-name font-display">BRACKET</span>
+            <span class="brand-name font-display">GAME PLAY</span>
             <span class="brand-sub font-mono">TOURNAMENT DESK</span>
           </div>
         </div>
@@ -92,7 +92,7 @@
           </h1>
 
           <p class="landing-summary">
-            Bracket holds prize funds on-chain for competitive gaming. Organizers post prizes with independent bracket
+            Game Play holds prize funds on-chain for competitive gaming. Organizers post prizes with independent bracket
             and roster sources. Players register authorized handles. GenLayer AI validators settle payouts directly to
             the winner's wallet once both public sources corroborate the victory.
           </p>
@@ -236,7 +236,7 @@
           </button>
           <div class="desk-brand-badge">
             <img src="static/bracket-mark.png" alt="Bracket Emblem" class="desk-logo" width="28" height="28">
-            <span class="desk-brand-title font-display">Bracket Desk</span>
+            <span class="desk-brand-title font-display">Game Play Desk</span>
           </div>
         </div>
 
